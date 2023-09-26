@@ -15,7 +15,7 @@ func main() {
 	// 创建一个新的设备配置请求
 	request := api.DeviceConfigRequest{
 		DeviceID:    "",                                     // 替换为你的DeviceID
-		AccessToken: "014f5e6c-e96e-dcaf-f183-0d047464442c", // 替换为你的AccessToken
+		AccessToken: "7672992c-74f7-ea00-38b0-eae00117349b", // 替换为你的AccessToken
 	}
 
 	// 使用客户端来获取设备配置
