@@ -23,11 +23,12 @@ type SubDevice struct {
 
 // 设备信息结构体
 type DeviceConfigResponseData struct {
-	AccessToken  string      `json:"AccessToken"`
-	DeviceType   string      `json:"DeviceType"`
-	ID           string      `json:"Id"`
-	ProtocolType string      `json:"ProtocolType"`
-	SubDevices   []SubDevice `json:"SubDevices"`
+	AccessToken  string                 `json:"AccessToken"`
+	DeviceType   string                 `json:"DeviceType"`
+	ID           string                 `json:"Id"`
+	ProtocolType string                 `json:"ProtocolType"`
+	SubDevices   []SubDevice            `json:"SubDevices"`
+	DeviceConfig map[string]interface{} `json:"DeviceConfig"`
 }
 
 // 响应结构体
