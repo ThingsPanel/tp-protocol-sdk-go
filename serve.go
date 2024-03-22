@@ -44,7 +44,7 @@ func (h *Handler) ListenAndServe(addr string) error {
 		}
 	})
 
-	mux.HandleFunc("/api/form/config", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/form/config", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			h.OnGetForm(w, r)
 		} else {
