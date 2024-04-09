@@ -9,8 +9,9 @@ import (
 
 // 请求结构体
 type DeviceConfigRequest struct {
-	DeviceID    string `json:"DeviceId"`
-	AccessToken string `json:"AccessToken"`
+	DeviceID     string `json:"DeviceId"`
+	AccessToken  string `json:"AccessToken"`
+	DeviceNumber string `json:"DeviceNumber"`
 }
 
 // 子设备信息结构体
