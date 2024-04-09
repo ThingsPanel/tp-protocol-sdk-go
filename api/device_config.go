@@ -43,7 +43,7 @@ type DeviceConfigResponse struct {
 func (a *API) GetDeviceConfig(request DeviceConfigRequest) (*DeviceConfigResponse, error) {
 
 	// 构建API终端的URL
-	apiEndpoint := fmt.Sprintf("%s/api/plugin/device/config", a.BaseURL)
+	apiEndpoint := fmt.Sprintf("%s/api/v1/plugin/device/config", a.BaseURL)
 
 	// 向API发送POST请求
 	resp, err := a.doPostRequest(apiEndpoint, request)
