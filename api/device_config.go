@@ -9,27 +9,27 @@ import (
 
 // 请求结构体
 type DeviceConfigRequest struct {
-	DeviceID     string `json:"DeviceId"`
-	AccessToken  string `json:"AccessToken"`
-	DeviceNumber string `json:"DeviceNumber"`
+	DeviceID     string `json:"device_id"`
+	Voucher      string `json:"voucher"`
+	DeviceNumber string `json:"device_number"`
 }
 
 // 子设备信息结构体
 type SubDevice struct {
-	AccessToken   string                 `json:"AccessToken"`
-	DeviceID      string                 `json:"DeviceId"`
-	SubDeviceAddr string                 `json:"SubDeviceAddr"`
-	Config        map[string]interface{} `json:"Config"`
+	Voucher       string                 `json:"voucher"`
+	DeviceID      string                 `json:"device_id"`
+	SubDeviceAddr string                 `json:"sub_device_addr"`
+	Config        map[string]interface{} `json:"config"`
 }
 
 // 设备信息结构体
 type DeviceConfigResponseData struct {
-	AccessToken  string                 `json:"AccessToken"`
-	DeviceType   string                 `json:"DeviceType"`
-	ID           string                 `json:"Id"`
-	ProtocolType string                 `json:"ProtocolType"`
-	SubDevices   []SubDevice            `json:"SubDevices"`
-	DeviceConfig map[string]interface{} `json:"DeviceConfig"`
+	Voucher      string                 `json:"voucher"`
+	DeviceType   string                 `json:"device_type"`
+	ID           string                 `json:"id"`
+	ProtocolType string                 `json:"Protocol_type"`
+	SubDevices   []SubDevice            `json:"sub_devices"`
+	Config       map[string]interface{} `json:"config"`
 }
 
 // 响应结构体
