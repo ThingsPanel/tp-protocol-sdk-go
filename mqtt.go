@@ -58,17 +58,16 @@ func (client *MQTTClient) Subscribe(topic string, callback mqtt.MessageHandler, 
 	return nil
 }
 
-//发送在线离线消息status 1-在线 0-离线
-func (client *MQTTClient) SendStatus(accessToken string, status string) (err error) {
+// 发送在线离线消息status 1-在线 0-离线
+func (client *MQTTClient) SendStatus(deviceID string, status string) (err error) {
 	// 校验参数
-	if accessToken == "" {
-		return fmt.Errorf("accessToken不能为空")
+	if deviceID == "" {
+		return fmt.Errorf("deviceID不能为空")
 	}
 	if status != "1" && status != "0" {
 		return fmt.Errorf("status只能为1或0")
 	}
-	payload := `{"accessToken":"` + accessToken + `","values":{"status":"` + status + `"}}`
-	token := client.client.Publish("device/status", 1, false, string(payload))
+	token := client.client.Publish("device/status/"+deviceID, 1, false, []byte(status))
 	token.Wait()
 	return token.Error()
 }
