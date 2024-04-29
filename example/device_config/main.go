@@ -10,13 +10,13 @@ import (
 
 func main() {
 	// 创建一个新的客户端实例
-	client := tpprotocolsdkgo.NewClient("http://47.115.210.16:9999") // 替换为你的baseURL
+	client := tpprotocolsdkgo.NewClient("http://127.0.0.1:9999") // 替换为你的baseURL
 
 	// 创建一个新的设备配置请求
 	request := api.DeviceConfigRequest{
-		DeviceID:     "",             // 替换为你的DeviceID
-		Voucher:      "",             // 替换为你的AccessToken
-		DeviceNumber: "402A8F5FB424", // 替换为你的DeviceNumber
+		DeviceID:     "",                         // 替换为你的DeviceID
+		Voucher:      "{\"reg_pkg\":\"xxxxxx\"}", // 替换为你的AccessToken
+		DeviceNumber: "",                         // 替换为你的DeviceNumber
 	}
 
 	// 使用客户端来获取设备配置

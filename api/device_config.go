@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 )
 
@@ -62,7 +62,7 @@ func (a *API) GetDeviceConfig(request DeviceConfigRequest) (*DeviceConfigRespons
 	}
 
 	// 读取整个响应体。
-	p, err := ioutil.ReadAll(resp.Body)
+	p, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("读取响应失败: %w", err)
 	}
