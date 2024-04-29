@@ -67,7 +67,7 @@ func (client *MQTTClient) SendStatus(deviceID string, status string) (err error)
 	if status != "1" && status != "0" {
 		return fmt.Errorf("status只能为1或0")
 	}
-	token := client.client.Publish("device/status/"+deviceID, 1, false, []byte(status))
+	token := client.client.Publish("devices/status/"+deviceID, 1, false, []byte(status))
 	token.Wait()
 	return token.Error()
 }
