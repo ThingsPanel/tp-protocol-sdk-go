@@ -28,7 +28,7 @@ func (h *Handler) ListenAndServe(addr string) error {
 	// 断开设备连接
 	mux.HandleFunc("/api/v1/device/disconnect", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			// h.OnDisconnectDevice(w, r)
+			h.OnDisconnectDevice(w, r)
 		} else {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
