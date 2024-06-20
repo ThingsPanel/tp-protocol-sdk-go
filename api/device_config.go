@@ -14,15 +14,6 @@ type DeviceConfigRequest struct {
 	DeviceNumber string `json:"device_number"`
 }
 
-// 子设备信息结构体
-type SubDevice struct {
-	Voucher                string                 `json:"voucher"`
-	DeviceID               string                 `json:"device_id"`
-	SubDeviceAddr          string                 `json:"sub_device_addr"`
-	Config                 map[string]interface{} `json:"config"`
-	ProtocolConfigTemplate map[string]interface{} `json:"protocol_config_template"` // 子设备配置的protocol_config
-}
-
 // 设备信息结构体
 type DeviceConfigResponseData struct {
 	Voucher                string                 `json:"voucher"`
