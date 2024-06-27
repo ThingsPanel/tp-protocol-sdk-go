@@ -7,8 +7,7 @@ import (
 // Handler 结构体用于存储用户提供的回调函数
 type Handler struct {
 	// 获取协议插件的json表单
-	OnGetForm   func(w http.ResponseWriter, r *http.Request)
-	OnGetFormV2 func(w http.ResponseWriter, r *http.Request)
+	OnGetForm func(w http.ResponseWriter, r *http.Request)
 	// 断开设备连接回调（让设备重新连接）
 	OnDisconnectDevice func(w http.ResponseWriter, r *http.Request)
 	// 获取设备列表
@@ -25,14 +24,6 @@ func (h *Handler) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/v1/form/config", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			h.OnGetForm(w, r)
-		} else {
-			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		}
-	})
-	// 获取协议插件的json表单
-	mux.HandleFunc("/api/v2/form/config", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			h.OnGetFormV2(w, r)
 		} else {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		}
