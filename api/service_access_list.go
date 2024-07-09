@@ -23,7 +23,7 @@ type ServiceAccessListResponseData struct {
 func (a *API) GetServiceAccessList(request ServiceAccessListRequest) (*ServiceAccessListResponseData, error) {
 
 	// 构建API终端的URL
-	apiEndpoint := fmt.Sprintf("%s/api/v1/pugin/service/access/list", a.BaseURL)
+	apiEndpoint := fmt.Sprintf("%s/api/v1/plugin/service/access/list", a.BaseURL)
 
 	// 向API发送POST请求
 	resp, err := a.doPostRequest(apiEndpoint, request)
