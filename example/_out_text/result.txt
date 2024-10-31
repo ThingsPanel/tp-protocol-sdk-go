@@ -1,439 +1,548 @@
 
 
-=== ..\..\..\tp-protocol-sdk-go\api\api.go ===
+=== ..\..\..\tp-protocol-sdk-go\client\api_client.go ===
 
-package api
+// client/api_client.go
+
+package client
 
 import (
 	"bytes"
-	"encoding/json"
-	"fmt"
-	"net/http"
-)
-
-// API 用于访问ThingsPanel API
-type API struct {
-	BaseURL    string
-	httpClient *http.Client
-}
-
-// NewAPI 创建一个新的API实例
-func NewAPI(baseURL string) *API {
-	return &API{
-		BaseURL:    baseURL,
-		httpClient: &http.Client{}, // 初始化 httpClient
-	}
-}
-
-// doRequest 发送HTTP-post请求
-func (a *API) doPostRequest(url string, reqBody interface{}) (*http.Response, error) {
-	bodyBytes, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %w", err)
-	}
-
-	resp, err := a.httpClient.Post(url, "application/json", bytes.NewBuffer(bodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("failed to send HTTP request: %w", err)
-	}
-
-	return resp, nil
-}
-
-
-=== ..\..\..\tp-protocol-sdk-go\api\common.go ===
-
-package api
-
-// 子设备信息结构体
-type SubDevice struct {
-	DeviceID               string                 `json:"device_id"`
-	Voucher                string                 `json:"voucher"`
-	DeviceNumber           string                 `json:"device_number"`
-	SubDeviceAddr          string                 `json:"sub_device_addr"`
-	Config                 map[string]interface{} `json:"config"`
-	ProtocolConfigTemplate map[string]interface{} `json:"protocol_config_template"` // 子设备配置的protocol_config（表单数据）
-}
-
-// 设备信息结构体
-type Device struct {
-	ID                     string                 `json:"id"`
-	Voucher                string                 `json:"voucher"`
-	DeviceNumber           string                 `json:"device_number"`
-	DeviceType             string                 `json:"device_type"`
-	ProtocolType           string                 `json:"Protocol_type"`
-	SubDevices             []SubDevice            `json:"sub_devices"`
-	Config                 map[string]interface{} `json:"config"`
-	ProtocolConfigTemplate map[string]interface{} `json:"protocol_config_template"` // 子设备配置的protocol_config（表单数据）
-}
-
-// 服务接入结构体
-type ServiceAccess struct {
-	ServiceAccessID             string   `json:"service_access_id"`
-	ServiceIdentifier           string   `json:"service_identifier"`
-	Voucher                     string   `json:"voucher"`                        // 服务凭证（表单数据）
-	ServiceAccessConfigTemplate string   `json:"service_access_config_template"` // 服务接入配置
-	Description                 string   `json:"description"`
-	Remark                      string   `json:"remark"`
-	Devices                     []Device `json:"devices"`
-}
-
-
-=== ..\..\..\tp-protocol-sdk-go\api\device_config.go ===
-
-package api
-
-import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"time"
 )
 
-// 请求结构体
+// APIClient TP平台API客户端
+type APIClient struct {
+	baseURL    string       // API基础URL
+	httpClient *http.Client // HTTP客户端
+	logger     *log.Logger  // 日志记录器
+}
+
+// APIClientOption 定义客户端配置选项
+type APIClientOption func(*APIClient)
+
+// WithTimeout 设置超时时间选项
+func WithTimeout(timeout time.Duration) APIClientOption {
+	return func(c *APIClient) {
+		c.httpClient.Timeout = timeout
+	}
+}
+
+// WithLogger 设置日志记录器选项
+func WithLogger(logger *log.Logger) APIClientOption {
+	return func(c *APIClient) {
+		c.logger = logger
+	}
+}
+
+// NewAPIClient 创建新的API客户端实例
+func NewAPIClient(baseURL string, opts ...APIClientOption) *APIClient {
+	client := &APIClient{
+		baseURL: baseURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		logger: log.New(log.Writer(), "[TP-SDK] ", log.LstdFlags|log.Lshortfile),
+	}
+
+	// 应用配置选项
+	for _, opt := range opts {
+		opt(client)
+	}
+
+	client.logger.Printf("初始化API客户端: baseURL=%s", baseURL)
+	return client
+}
+
+// doRequest 执行HTTP请求并处理响应
+func (c *APIClient) doRequest(ctx context.Context, method, path string, reqBody, respBody interface{}) error {
+	// 构建完整URL
+	url := fmt.Sprintf("%s%s", c.baseURL, path)
+	c.logger.Printf("准备发送请求: method=%s, url=%s", method, url)
+
+	// 序列化请求体
+	var bodyReader io.Reader
+	if reqBody != nil {
+		bodyBytes, err := json.Marshal(reqBody)
+		if err != nil {
+			c.logger.Printf("请求体序列化失败: %v", err)
+			return fmt.Errorf("序列化请求体失败: %w", err)
+		}
+		bodyReader = bytes.NewReader(bodyBytes)
+		c.logger.Printf("请求体: %s", string(bodyBytes))
+	}
+
+	// 创建请求
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	if err != nil {
+		c.logger.Printf("创建请求失败: %v", err)
+		return fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	// 设置请求头
+	if reqBody != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", "application/json")
+
+	// 执行请求
+	startTime := time.Now()
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		c.logger.Printf("请求执行失败: %v", err)
+		return fmt.Errorf("执行请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 记录请求耗时
+	c.logger.Printf("请求完成: 耗时=%v, 状态码=%d", time.Since(startTime), resp.StatusCode)
+
+	// 读取响应体
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.logger.Printf("读取响应体失败: %v", err)
+		return fmt.Errorf("读取响应体失败: %w", err)
+	}
+
+	// 检查状态码
+	if resp.StatusCode != http.StatusOK {
+		c.logger.Printf("请求返回非200状态码: status=%d, body=%s", resp.StatusCode, string(body))
+		return fmt.Errorf("请求失败，状态码: %d, 响应: %s", resp.StatusCode, string(body))
+	}
+
+	// 解析响应体
+	if respBody != nil {
+		if err := json.Unmarshal(body, respBody); err != nil {
+			c.logger.Printf("响应体解析失败: %v, body=%s", err, string(body))
+			return fmt.Errorf("解析响应体失败: %w", err)
+		}
+		c.logger.Printf("响应体解析成功")
+	}
+
+	return nil
+}
+
+// Get 执行GET请求
+func (c *APIClient) Get(ctx context.Context, path string, response interface{}) error {
+	return c.doRequest(ctx, http.MethodGet, path, nil, response)
+}
+
+// Post 执行POST请求
+func (c *APIClient) Post(ctx context.Context, path string, request, response interface{}) error {
+	return c.doRequest(ctx, http.MethodPost, path, request, response)
+}
+
+
+=== ..\..\..\tp-protocol-sdk-go\client\client.go ===
+
+// client/client.go
+
+package client
+
+import (
+	"fmt"
+	"log"
+)
+
+// Client SDK主客户端，整合所有功能
+type Client struct {
+	// API客户端
+	api     *APIClient
+	device  *DeviceAPI
+	service *ServiceAPI
+
+	// MQTT客户端
+	mqtt *MQTTClient
+
+	// 日志
+	logger *log.Logger
+}
+
+// ClientConfig SDK客户端配置
+type ClientConfig struct {
+	// API配置
+	BaseURL    string
+	APITimeout int // 秒
+
+	// MQTT配置
+	MQTTBroker   string
+	MQTTClientID string
+	MQTTUsername string
+	MQTTPassword string
+
+	// 日志配置
+	Logger *log.Logger
+}
+
+// NewClient 创建新的SDK客户端实例
+func NewClient(config ClientConfig) (*Client, error) {
+	// 设置默认logger
+	logger := config.Logger
+	if logger == nil {
+		logger = log.New(log.Writer(), "[TP-SDK] ", log.LstdFlags|log.Lshortfile)
+	}
+
+	logger.Printf("初始化SDK客户端")
+
+	// 创建API客户端
+	apiClient := NewAPIClient(config.BaseURL, WithLogger(logger))
+	if apiClient == nil {
+		return nil, fmt.Errorf("创建API客户端失败")
+	}
+
+	// 创建MQTT客户端
+	mqttClient := NewMQTTClient(MQTTConfig{
+		Broker:   config.MQTTBroker,
+		ClientID: config.MQTTClientID,
+		Username: config.MQTTUsername,
+		Password: config.MQTTPassword,
+	}, logger)
+	if mqttClient == nil {
+		return nil, fmt.Errorf("创建MQTT客户端失败")
+	}
+
+	// 创建设备API和服务API
+	deviceAPI := NewDeviceAPI(apiClient)
+	serviceAPI := NewServiceAPI(apiClient)
+
+	return &Client{
+		api:     apiClient,
+		device:  deviceAPI,
+		service: serviceAPI,
+		mqtt:    mqttClient,
+		logger:  logger,
+	}, nil
+}
+
+// Connect 连接到平台
+func (c *Client) Connect() error {
+	c.logger.Printf("开始连接平台")
+
+	// 连接MQTT
+	if err := c.mqtt.Connect(); err != nil {
+		c.logger.Printf("MQTT连接失败: %v", err)
+		return fmt.Errorf("MQTT连接失败: %w", err)
+	}
+
+	c.logger.Printf("平台连接成功")
+	return nil
+}
+
+// Device 获取设备API操作接口
+func (c *Client) Device() *DeviceAPI {
+	return c.device
+}
+
+// Service 获取服务API操作接口
+func (c *Client) Service() *ServiceAPI {
+	return c.service
+}
+
+// MQTT 获取MQTT客户端
+func (c *Client) MQTT() *MQTTClient {
+	return c.mqtt
+}
+
+// Close 关闭客户端连接
+func (c *Client) Close() {
+	c.logger.Printf("开始关闭客户端连接")
+
+	// 断开MQTT连接
+	if c.mqtt != nil {
+		c.mqtt.Disconnect()
+	}
+
+	c.logger.Printf("客户端连接已关闭")
+}
+
+
+=== ..\..\..\tp-protocol-sdk-go\client\device_api.go ===
+
+// client/device_api.go
+
+package client
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/ThingsPanel/tp-protocol-sdk-go/types"
+)
+
+// DeviceAPI 设备相关API封装
+type DeviceAPI struct {
+	client *APIClient
+}
+
+// DeviceConfigRequest 获取设备配置请求
 type DeviceConfigRequest struct {
 	DeviceID     string `json:"device_id"`
 	Voucher      string `json:"voucher"`
 	DeviceNumber string `json:"device_number"`
 }
 
-// 设备信息结构体
-type DeviceConfigResponseData struct {
-	Voucher                string                 `json:"voucher"`
-	DeviceType             string                 `json:"device_type"`
-	ID                     string                 `json:"id"`
-	ProtocolType           string                 `json:"Protocol_type"`
-	SubDevices             []SubDevice            `json:"sub_devices"`
-	Config                 map[string]interface{} `json:"config"`
-	ProtocolConfigTemplate map[string]interface{} `json:"protocol_config_template"` // 子设备配置的protocol_config
-}
-
-// 响应结构体
+// DeviceConfigResponse 设备配置响应
 type DeviceConfigResponse struct {
-	Code    int                      `json:"code"`
-	Message string                   `json:"message"`
-	Data    DeviceConfigResponseData `json:"data"`
+	Code    int          `json:"code"`
+	Message string       `json:"message"`
+	Data    types.Device `json:"data"`
 }
 
-// 获取设备配置（通过设备id或者设备令牌）
-func (a *API) GetDeviceConfig(request DeviceConfigRequest) (*DeviceConfigResponse, error) {
+// NewDeviceAPI 创建设备API实例
+func NewDeviceAPI(client *APIClient) *DeviceAPI {
+	return &DeviceAPI{
+		client: client,
+	}
+}
 
-	// 构建API终端的URL
-	apiEndpoint := fmt.Sprintf("%s/api/v1/plugin/device/config", a.BaseURL)
+// GetDeviceConfig 获取设备配置信息
+func (d *DeviceAPI) GetDeviceConfig(ctx context.Context, req *DeviceConfigRequest) (*DeviceConfigResponse, error) {
+	d.client.logger.Printf("开始获取设备配置: deviceID=%s", req.DeviceID)
 
-	// 向API发送POST请求
-	resp, err := a.doPostRequest(apiEndpoint, request)
+	var resp DeviceConfigResponse
+	err := d.client.Post(ctx, "/api/v1/plugin/device/config", req, &resp)
 	if err != nil {
-		return nil, err
-	}
-	// 确保在处理完响应后关闭响应体。
-	defer resp.Body.Close()
-
-	// 检查HTTP状态码，确保我们收到了成功的响应。
-	// 如果不是，返回一个包含状态码的错误信息。
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("获取设备配置失败: HTTP状态码 %d", resp.StatusCode)
+		d.client.logger.Printf("获取设备配置失败: %v", err)
+		return nil, fmt.Errorf("获取设备配置失败: %w", err)
 	}
 
-	// 读取整个响应体。
-	p, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
-	}
-
-	// 初始化一个变量来存放响应数据结构。
-	var response DeviceConfigResponse
-
-	// 解析响应中的JSON数据，并填充到我们的结构体中。
-	err = json.Unmarshal(p, &response)
-	if err != nil {
-		return nil, fmt.Errorf("解析响应JSON失败: %w; 响应内容: %s", err, string(p))
-	}
-
-	// 返回填充后的响应结构体。
-	return &response, nil
+	d.client.logger.Printf("获取设备配置成功: deviceID=%s, deviceType=%s",
+		req.DeviceID, resp.Data.DeviceType)
+	return &resp, nil
 }
 
 
-=== ..\..\..\tp-protocol-sdk-go\api\device_config_list.go ===
+=== ..\..\..\tp-protocol-sdk-go\client\mqtt_client.go ===
 
-package api
+// client/mqtt_client.go
+
+package client
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
+	"log"
+	"time"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-// 请求结构体
-type DeviceConfigListRequest struct {
-	ProtocolType string `json:"protocol_type"`
-	DeviceType   string `json:"device_type"`
+// MQTTClient MQTT客户端封装
+type MQTTClient struct {
+	client    mqtt.Client
+	logger    *log.Logger
+	broker    string
+	clientID  string
+	username  string
+	password  string
+	connected bool
 }
 
-// 子设备信息结构体
-type SubDeviceConfig struct {
-	AccessToken   string                 `json:"AccessToken"`
-	DeviceID      string                 `json:"DeviceId"`
-	SubDeviceAddr string                 `json:"SubDeviceAddr"`
-	Config        map[string]interface{} `json:"Config"` // 表单配置
+// MessageHandler 定义消息处理函数类型
+type MessageHandler func(topic string, payload []byte)
+
+// MQTTConfig MQTT配置项
+type MQTTConfig struct {
+	Broker   string
+	ClientID string
+	Username string
+	Password string
 }
 
-// 设备信息结构体
-type DeviceConfigListResponseData struct {
-	ProtocolType string                 `json:"ProtocolType"`
-	AccessToken  string                 `json:"AccessToken"`
-	DeviceType   string                 `json:"DeviceType"`
-	ID           string                 `json:"Id"`
-	DeviceConfig map[string]interface{} `json:"DeviceConfig,omitempty"` // 表单配置
-	SubDevices   []SubDeviceConfig      `json:"SubDevices,omitempty"`
-}
-
-// 响应结构体
-type DeviceConfigListResponse struct {
-	Code    int                        `json:"code"`
-	Message string                     `json:"message"`
-	Data    []DeviceConfigResponseData `json:"data"`
-}
-
-// 响应内容会被解析到 DeviceConfigListResponse 结构体中。
-func (a *API) GetDeviceConfigList(request DeviceConfigListRequest) (*DeviceConfigListResponse, error) {
-
-	// 构建API终端的URL
-	apiEndpoint := fmt.Sprintf("%s/api/plugin/all_device/config", a.BaseURL)
-
-	// 向API发送POST请求
-	resp, err := a.doPostRequest(apiEndpoint, request)
-	if err != nil {
-		return nil, err
-	}
-	// 确保在处理完响应后关闭响应体。
-	defer resp.Body.Close()
-
-	// 检查HTTP状态码，确保我们收到了成功的响应。
-	// 如果不是，返回一个包含状态码的错误信息。
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("获取设备配置列表失败: HTTP状态码 %d", resp.StatusCode)
+// NewMQTTClient 创建MQTT客户端实例
+func NewMQTTClient(config MQTTConfig, logger *log.Logger) *MQTTClient {
+	if logger == nil {
+		logger = log.New(log.Writer(), "[TP-MQTT] ", log.LstdFlags|log.Lshortfile)
 	}
 
-	// 读取整个响应体。
-	p, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
+	return &MQTTClient{
+		broker:   config.Broker,
+		clientID: config.ClientID,
+		username: config.Username,
+		password: config.Password,
+		logger:   logger,
+	}
+}
+
+// Connect 连接到MQTT服务器
+func (m *MQTTClient) Connect() error {
+	m.logger.Printf("开始连接MQTT服务器: broker=%s, clientID=%s", m.broker, m.clientID)
+
+	opts := mqtt.NewClientOptions().
+		AddBroker(m.broker).
+		SetClientID(m.clientID).
+		SetUsername(m.username).
+		SetPassword(m.password).
+		SetAutoReconnect(true).
+		SetCleanSession(true).
+		SetKeepAlive(30 * time.Second).
+		SetConnectTimeout(30 * time.Second)
+
+	// 设置连接丢失处理函数
+	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
+		m.logger.Printf("MQTT连接丢失: %v", err)
+		m.connected = false
+	})
+
+	// 设置连接建立处理函数
+	opts.SetOnConnectHandler(func(client mqtt.Client) {
+		m.logger.Printf("MQTT连接成功建立")
+		m.connected = true
+	})
+
+	// 创建客户端实例
+	m.client = mqtt.NewClient(opts)
+
+	// 尝试连接
+	if token := m.client.Connect(); token.Wait() && token.Error() != nil {
+		m.logger.Printf("MQTT连接失败: %v", token.Error())
+		return fmt.Errorf("MQTT连接失败: %w", token.Error())
 	}
 
-	// 初始化一个变量来存放响应数据结构。
-	var response DeviceConfigListResponse
+	m.logger.Printf("MQTT连接成功")
+	return nil
+}
 
-	// 解析响应中的JSON数据，并填充到我们的结构体中。
-	if err := json.Unmarshal(p, &response); err != nil {
-		return nil, fmt.Errorf("解析响应JSON失败: %w; 响应内容: %s", err, string(p))
+// Publish 发布消息
+func (m *MQTTClient) Publish(topic string, qos byte, payload interface{}) error {
+	if !m.connected {
+		return fmt.Errorf("MQTT客户端未连接")
 	}
 
-	// 返回填充后的响应结构体。
-	return &response, nil
+	m.logger.Printf("准备发布消息: topic=%s, qos=%d", topic, qos)
+
+	token := m.client.Publish(topic, qos, false, payload)
+	if token.Wait() && token.Error() != nil {
+		m.logger.Printf("消息发布失败: %v", token.Error())
+		return fmt.Errorf("消息发布失败: %w", token.Error())
+	}
+
+	m.logger.Printf("消息发布成功")
+	return nil
+}
+
+// Subscribe 订阅主题
+func (m *MQTTClient) Subscribe(topic string, qos byte, handler MessageHandler) error {
+	if !m.connected {
+		return fmt.Errorf("MQTT客户端未连接")
+	}
+
+	m.logger.Printf("准备订阅主题: topic=%s, qos=%d", topic, qos)
+
+	// 将自定义的MessageHandler转换为mqtt.MessageHandler
+	wrapper := func(client mqtt.Client, msg mqtt.Message) {
+		handler(msg.Topic(), msg.Payload())
+	}
+
+	token := m.client.Subscribe(topic, qos, wrapper)
+	if token.Wait() && token.Error() != nil {
+		m.logger.Printf("主题订阅失败: %v", token.Error())
+		return fmt.Errorf("主题订阅失败: %w", token.Error())
+	}
+
+	m.logger.Printf("主题订阅成功")
+	return nil
+}
+
+// Disconnect 断开MQTT连接
+func (m *MQTTClient) Disconnect() {
+	if m.connected {
+		m.logger.Printf("准备断开MQTT连接")
+		m.client.Disconnect(250)
+		m.connected = false
+		m.logger.Printf("MQTT连接已断开")
+	}
+}
+
+// IsConnected 检查是否已连接
+func (m *MQTTClient) IsConnected() bool {
+	return m.connected
 }
 
 
-=== ..\..\..\tp-protocol-sdk-go\api\heartbeat.go ===
+=== ..\..\..\tp-protocol-sdk-go\client\service_api.go ===
 
-package api
+// client/service_api.go
+
+package client
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
+
+	"github.com/ThingsPanel/tp-protocol-sdk-go/types"
 )
 
-// /api/v1/plugin/heartbeat
-// 请求结构体
+// ServiceAPI 服务接入相关API封装
+type ServiceAPI struct {
+	client *APIClient
+}
+
+// ServiceAccessRequest 获取服务接入点请求
+type ServiceAccessRequest struct {
+	ServiceAccessID   string `json:"service_access_id"`
+	ServiceIdentifier string `json:"service_identifier"`
+}
+
+// ServiceAccessResponse 服务接入响应
+type ServiceAccessResponse struct {
+	Code    int                 `json:"code"`
+	Message string              `json:"message"`
+	Data    types.ServiceAccess `json:"data"`
+}
+
+// HeartbeatRequest 心跳请求
 type HeartbeatRequest struct {
 	ServiceIdentifier string `json:"service_identifier"`
 }
 
-// 响应结构体
-type HeartbeatResponseData struct {
+// HeartbeatResponse 心跳响应
+type HeartbeatResponse struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
 
-// 心跳
-func (a *API) Heartbeat(request HeartbeatRequest) (*HeartbeatResponseData, error) {
-
-	// 构建API终端的URL
-	apiEndpoint := fmt.Sprintf("%s/api/v1/plugin/heartbeat", a.BaseURL)
-
-	// 向API发送POST请求
-	resp, err := a.doPostRequest(apiEndpoint, request)
-	if err != nil {
-		return nil, err
+// NewServiceAPI 创建服务API实例
+func NewServiceAPI(client *APIClient) *ServiceAPI {
+	return &ServiceAPI{
+		client: client,
 	}
-	// 确保在处理完响应后关闭响应体。
-	defer resp.Body.Close()
-
-	// 检查HTTP状态码，确保我们收到了成功的响应。
-	// 如果不是，返回一个包含状态码的错误信息。
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("心跳失败: HTTP状态码 %d", resp.StatusCode)
-	}
-
-	// 读取整个响应体。
-	p, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
-	}
-
-	// 解析json响应
-	var data HeartbeatResponseData
-	err = json.Unmarshal(p, &data)
-	if err != nil {
-		return nil, fmt.Errorf("解析json响应失败: %w", err)
-	}
-
-	return &data, nil
 }
 
+// GetServiceAccess 获取服务接入点信息
+func (s *ServiceAPI) GetServiceAccess(ctx context.Context, req *ServiceAccessRequest) (*ServiceAccessResponse, error) {
+	s.client.logger.Printf("开始获取服务接入点信息: serviceAccessID=%s", req.ServiceAccessID)
 
-=== ..\..\..\tp-protocol-sdk-go\api\service_access.go ===
-
-package api
-
-import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-)
-
-// 请求结构体
-type ServiceAccessRequest struct {
-	ServiceAccessID string `json:"service_access_id"`
-}
-
-// 响应结构体
-type ServiceAccessResponseData struct {
-	Code    int           `json:"code"`
-	Message string        `json:"message"`
-	Data    ServiceAccess `json:"data"`
-}
-
-// 获取服务接入点
-func (a *API) GetServiceAccess(request ServiceAccessRequest) (*ServiceAccessResponseData, error) {
-
-	// 构建API终端的URL
-	apiEndpoint := fmt.Sprintf("%s/api/v1/plugin/service/access", a.BaseURL)
-
-	// 向API发送POST请求
-	resp, err := a.doPostRequest(apiEndpoint, request)
+	var resp ServiceAccessResponse
+	err := s.client.Post(ctx, "/api/v1/plugin/service/access", req, &resp)
 	if err != nil {
-		return nil, err
-	}
-	// 确保在处理完响应后关闭响应体。
-	defer resp.Body.Close()
-
-	// 检查HTTP状态码，确保我们收到了成功的响应。
-	// 如果不是，返回一个包含状态码的错误信息。
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("获取服务接入点失败: HTTP状态码 %d", resp.StatusCode)
+		s.client.logger.Printf("获取服务接入点信息失败: %v", err)
+		return nil, fmt.Errorf("获取服务接入点信息失败: %w", err)
 	}
 
-	// 读取整个响应体。
-	p, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
-	}
-
-	// 解析json响应
-	var data ServiceAccessResponseData
-	err = json.Unmarshal(p, &data)
-	if err != nil {
-		return nil, fmt.Errorf("解析json响应失败: %w", err)
-	}
-
-	return &data, nil
+	s.client.logger.Printf("获取服务接入点信息成功: serviceIdentifier=%s",
+		resp.Data.ServiceIdentifier)
+	return &resp, nil
 }
 
+// SendHeartbeat 发送服务心跳
+func (s *ServiceAPI) SendHeartbeat(ctx context.Context, req *HeartbeatRequest) (*HeartbeatResponse, error) {
+	s.client.logger.Printf("开始发送服务心跳: serviceIdentifier=%s", req.ServiceIdentifier)
 
-=== ..\..\..\tp-protocol-sdk-go\api\service_access_list.go ===
-
-package api
-
-import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-)
-
-// 请求结构体
-type ServiceAccessListRequest struct {
-	ServiceIdentifier string `json:"service_identifier"`
-}
-
-// 响应结构体
-type ServiceAccessListResponseData struct {
-	Code    int             `json:"code"`
-	Message string          `json:"message"`
-	Data    []ServiceAccess `json:"data"`
-}
-
-// 获取服务接入点列表
-func (a *API) GetServiceAccessList(request ServiceAccessListRequest) (*ServiceAccessListResponseData, error) {
-
-	// 构建API终端的URL
-	apiEndpoint := fmt.Sprintf("%s/api/v1/plugin/service/access/list", a.BaseURL)
-
-	// 向API发送POST请求
-	resp, err := a.doPostRequest(apiEndpoint, request)
+	var resp HeartbeatResponse
+	err := s.client.Post(ctx, "/api/v1/plugin/heartbeat", req, &resp)
 	if err != nil {
-		return nil, err
-	}
-	// 确保在处理完响应后关闭响应体。
-	defer resp.Body.Close()
-
-	// 检查HTTP状态码，确保我们收到了成功的响应。
-	// 如果不是，返回一个包含状态码的错误信息。
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("获取服务接入点列表失败: HTTP状态码 %d", resp.StatusCode)
+		s.client.logger.Printf("发送服务心跳失败: %v", err)
+		return nil, fmt.Errorf("发送服务心跳失败: %w", err)
 	}
 
-	// 读取整个响应体。
-	p, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
-	}
-
-	// 解析json响应
-	var data ServiceAccessListResponseData
-	err = json.Unmarshal(p, &data)
-	if err != nil {
-		return nil, fmt.Errorf("解析json响应失败: %w", err)
-	}
-
-	return &data, nil
-}
-
-
-=== ..\..\..\tp-protocol-sdk-go\client.go ===
-
-package tpprotocolsdkgo
-
-import (
-	"github.com/ThingsPanel/tp-protocol-sdk-go/api"
-)
-
-// 用于访问ThingsPanel API的客户端
-type Client struct {
-	API *api.API
-}
-
-// 创建一个新的客户端实例
-func NewClient(baseURL string) *Client {
-	return &Client{
-		API: api.NewAPI(baseURL),
-	}
+	s.client.logger.Printf("发送服务心跳成功")
+	return &resp, nil
 }
 
 
@@ -524,323 +633,644 @@ func main() {
 	fmt.Println("文件合并完成!")
 }
 
-// ./merger -src=../../tp-protocol-sdk-go -out=result.txt -types=.go,.java -exclude=.git,vendor
+// go run . -src=../../../tp-protocol-sdk-go -out=result.txt -types=.go,.java -exclude=.git,vendor
 
 
-=== ..\..\..\tp-protocol-sdk-go\example\device_config\main.go ===
+=== ..\..\..\tp-protocol-sdk-go\example\handler\client\main.go ===
+
+// examples/handler/client/main.go
 
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
-
-	tpprotocolsdkgo "github.com/ThingsPanel/tp-protocol-sdk-go"
-	"github.com/ThingsPanel/tp-protocol-sdk-go/api"
-)
-
-func main() {
-	// 创建一个新的客户端实例
-	client := tpprotocolsdkgo.NewClient("http://127.0.0.1:9999") // 替换为你的baseURL
-
-	// 创建一个新的设备配置请求
-	request := api.DeviceConfigRequest{
-		DeviceID:     "",                         // 替换为你的DeviceID
-		Voucher:      "{\"reg_pkg\":\"xxxxxx\"}", // 替换为你的AccessToken
-		DeviceNumber: "",                         // 替换为你的DeviceNumber
-	}
-
-	// 使用客户端来获取设备配置
-	responseData, err := client.API.GetDeviceConfig(request)
-	if err != nil {
-		log.Fatalf("failed to get device config: %v", err)
-	}
-
-	// 打印设备配置响应数据
-	fmt.Printf("Device Config Response Data: %+v\n", responseData)
-
-}
-
-
-=== ..\..\..\tp-protocol-sdk-go\example\device_config_list\main.go ===
-
-package main
-
-import (
-	"fmt"
-	"log"
-
-	tpprotocolsdkgo "github.com/ThingsPanel/tp-protocol-sdk-go"
-	"github.com/ThingsPanel/tp-protocol-sdk-go/api"
-)
-
-func main() {
-	// 创建一个新的客户端实例
-	client := tpprotocolsdkgo.NewClient("http://dev.thingspanel.cn") // 替换为你的baseURL
-
-	// 创建一个新的设备配置请求
-	request := api.DeviceConfigListRequest{
-		ProtocolType: "MODBUS_RTU", // 替换为你的ProtocolType
-		DeviceType:   "2",          // 替换为你的DeviceType
-	}
-
-	// 使用客户端来获取设备配置
-	responseData, err := client.API.GetDeviceConfigList(request)
-	if err != nil {
-		log.Fatalf("failed to get device config: %v", err)
-	}
-
-	// 打印设备配置响应数据
-	fmt.Printf("Device Config Response Data: %+v\n", responseData)
-
-}
-
-
-=== ..\..\..\tp-protocol-sdk-go\example\mqtt\main.go ===
-
-package main
-
-import (
-	"fmt"
-	"log"
-	"time"
-
-	tpprotocolsdkgo "github.com/ThingsPanel/tp-protocol-sdk-go"
-	mqtt "github.com/eclipse/paho.mqtt.golang"
-)
-
-func main() {
-	// 获取uuid
-
-	// 创建新的MQTT客户端实例
-	client := tpprotocolsdkgo.NewMQTTClient("dev.thingspanel.cn:1883", "root", "root")
-
-	// 尝试连接到MQTT代理
-	if err := client.Connect(); err != nil {
-		log.Fatalf("连接失败: %v", err)
-	}
-	fmt.Println("连接成功")
-
-	// 订阅一个主题，并提供一个回调函数来处理接收到的消息
-	if err := client.Subscribe("test/topic", func(client mqtt.Client, msg mqtt.Message) {
-		fmt.Printf("收到消息: %s\n", msg.Payload())
-	}, 0); err != nil {
-		log.Fatalf("订阅失败: %v", err)
-	}
-	// 订阅一个主题，并提供一个回调函数来处理接收到的消息
-	if err := client.Subscribe("device/status", func(client mqtt.Client, msg mqtt.Message) {
-		fmt.Printf("收到消息: %s\n", msg.Payload())
-	}, 0); err != nil {
-		log.Fatalf("订阅失败: %v", err)
-	}
-	err := client.SendStatus("123", "1")
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println("发送成功")
-	// 在一个无限循环中周期性地发布消息
-	for {
-		if err := client.Publish("test/topic", "Hello, MQTT!", 1); err != nil {
-			log.Printf("发布失败: %v", err)
-		}
-		time.Sleep(1 * time.Second) // 每秒发送一次
-	}
-
-}
-
-
-=== ..\..\..\tp-protocol-sdk-go\example\protocol_serve\main.go ===
-
-package main
-
-import (
-	"fmt"
 	"net/http"
-
-	tpprotocolsdkgo "github.com/ThingsPanel/tp-protocol-sdk-go"
+	"net/url"
+	"os"
 )
 
 func main() {
-	handler := &tpprotocolsdkgo.Handler{
-		OnGetForm: func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "Handle get form\n")
-		},
+	logger := log.New(os.Stdout, "[Client] ", log.LstdFlags|log.Lshortfile)
+	baseURL := "http://localhost:8080"
+
+	// 1. 测试获取表单配置
+	logger.Println("测试获取表单配置...")
+	formConfig := testGetFormConfig(baseURL, logger)
+	logger.Printf("表单配置: %+v\n", formConfig)
+
+	// 2. 测试设备断开连接
+	logger.Println("\n测试设备断开连接...")
+	testDeviceDisconnect(baseURL, "device-001", logger)
+
+	// 3. 测试发送通知
+	logger.Println("\n测试发送通知...")
+	testSendNotification(baseURL, logger)
+
+	// 4. 测试获取设备列表
+	logger.Println("\n测试获取设备列表...")
+	deviceList := testGetDeviceList(baseURL, logger)
+	logger.Printf("设备列表: %+v\n", deviceList)
+}
+
+// 获取表单配置
+func testGetFormConfig(baseURL string, logger *log.Logger) map[string]interface{} {
+	// 构建请求URL和参数
+	params := url.Values{}
+	params.Add("protocol_type", "modbus")
+	params.Add("device_type", "1")
+	params.Add("form_type", "CFG")
+
+	url := fmt.Sprintf("%s/api/v1/form/config?%s", baseURL, params.Encode())
+
+	resp, err := http.Get(url)
+	if err != nil {
+		logger.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		logger.Fatalf("解析响应失败: %v", err)
 	}
 
-	if err := handler.ListenAndServe(":9999"); err != nil {
-		panic(err)
+	return result
+}
+
+// 测试设备断开连接
+func testDeviceDisconnect(baseURL string, deviceID string, logger *log.Logger) {
+	reqBody, err := json.Marshal(map[string]string{
+		"device_id": deviceID,
+	})
+	if err != nil {
+		logger.Fatalf("构建请求体失败: %v", err)
 	}
+
+	resp, err := http.Post(
+		fmt.Sprintf("%s/api/v1/device/disconnect", baseURL),
+		"application/json",
+		bytes.NewBuffer(reqBody),
+	)
+	if err != nil {
+		logger.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Fatalf("读取响应失败: %v", err)
+	}
+
+	logger.Printf("响应: %s", string(body))
+}
+
+// 测试发送通知
+func testSendNotification(baseURL string, logger *log.Logger) {
+	notifyData := map[string]string{
+		"message_type": "1",
+		"message":      `{"service_access_id":"service-001"}`,
+	}
+
+	reqBody, err := json.Marshal(notifyData)
+	if err != nil {
+		logger.Fatalf("构建请求体失败: %v", err)
+	}
+
+	resp, err := http.Post(
+		fmt.Sprintf("%s/api/v1/plugin/notification", baseURL),
+		"application/json",
+		bytes.NewBuffer(reqBody),
+	)
+	if err != nil {
+		logger.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Fatalf("读取响应失败: %v", err)
+	}
+
+	logger.Printf("响应: %s", string(body))
+}
+
+// 测试获取设备列表
+func testGetDeviceList(baseURL string, logger *log.Logger) map[string]interface{} {
+	// 构建请求URL和参数
+	params := url.Values{}
+	params.Add("voucher", "test-voucher")
+	params.Add("service_identifier", "test-service")
+	params.Add("page_size", "10")
+	params.Add("page", "1")
+
+	url := fmt.Sprintf("%s/api/v1/plugin/device/list?%s", baseURL, params.Encode())
+
+	resp, err := http.Get(url)
+	if err != nil {
+		logger.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		logger.Fatalf("解析响应失败: %v", err)
+	}
+
+	return result
 }
 
 
-=== ..\..\..\tp-protocol-sdk-go\example\service_access_list\main.go ===
+=== ..\..\..\tp-protocol-sdk-go\example\handler\main.go ===
+
+// examples/handler/main.go
 
 package main
 
 import (
-	"fmt"
 	"log"
+	"os"
 
-	tpprotocolsdkgo "github.com/ThingsPanel/tp-protocol-sdk-go"
-	"github.com/ThingsPanel/tp-protocol-sdk-go/api"
+	"github.com/ThingsPanel/tp-protocol-sdk-go/handler"
 )
 
 func main() {
-	// 创建一个新的客户端实例
-	client := tpprotocolsdkgo.NewClient("http://c.thingspanel.cn") // 替换为你的baseURL
+	logger := log.New(os.Stdout, "[TP-Example] ", log.LstdFlags|log.Lshortfile)
 
-	// 创建一个新的设备配置请求
-	request := api.ServiceAccessListRequest{
-		ServiceIdentifier: "hk_isc",
-	}
-
-	// 使用客户端来获取设备配置
-	responseData, err := client.API.GetServiceAccessList(request)
-	if err != nil {
-		log.Fatalf("failed to get device config: %v", err)
-	}
-
-	// 打印设备配置响应数据
-	fmt.Printf("Device Config Response Data: %+v\n", responseData)
-
-}
-
-
-=== ..\..\..\tp-protocol-sdk-go\mqtt.go ===
-
-package tpprotocolsdkgo
-
-import (
-	"fmt"
-	"log"
-	"time"
-
-	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/go-basic/uuid"
-)
-
-// MQTT客户端结构体
-type MQTTClient struct {
-	client mqtt.Client
-}
-
-// 创建新的MQTT客户端
-func NewMQTTClient(broker string, username string, password string) *MQTTClient {
-	clientID := uuid.New()
-	opts := mqtt.NewClientOptions()
-	opts.AddBroker(broker)
-	opts.SetClientID(clientID)
-	opts.SetAutoReconnect(true) // 启用自动重新连接
-	opts.SetUsername(username)
-	opts.SetPassword(password)
-	opts.SetConnectionLostHandler(func(client mqtt.Client, err error) {
-		log.Printf("连接丢失: %v", err)
+	// 创建处理器
+	h := handler.NewHandler(handler.HandlerConfig{
+		Logger: logger,
 	})
 
-	client := mqtt.NewClient(opts)
-	return &MQTTClient{client: client}
-}
+	// 设置表单配置处理函数
+	h.SetFormConfigHandler(func(req *handler.GetFormConfigRequest) (interface{}, error) {
+		logger.Printf("收到表单配置请求: type=%s", req.FormType)
+		return map[string]interface{}{
+			"fields": []map[string]interface{}{
+				{
+					"name":  "host",
+					"type":  "string",
+					"label": "服务器地址",
+				},
+				{
+					"name":  "port",
+					"type":  "number",
+					"label": "端口",
+				},
+			},
+		}, nil
+	})
 
-// 连接到MQTT代理，如果连接失败则重试100次
-func (client *MQTTClient) Connect() error {
-	for retry := 0; retry < 100; retry++ {
-		if token := client.client.Connect(); token.Wait() && token.Error() == nil {
-			return nil
-		}
-		log.Printf("连接失败, 尝试重新连接, 尝试 #%d...", retry+1)
-		time.Sleep(6 * time.Second) // 等待6秒后重试
+	// 设置设备断开连接处理函数
+	h.SetDeviceDisconnectHandler(func(req *handler.DeviceDisconnectRequest) error {
+		logger.Printf("设备断开连接: %s", req.DeviceID)
+		return nil
+	})
+
+	// 设置通知处理函数
+	h.SetNotificationHandler(func(req *handler.NotificationRequest) error {
+		logger.Printf("收到通知: type=%s", req.MessageType)
+		return nil
+	})
+
+	// 设置获取设备列表处理函数
+	h.SetGetDeviceListHandler(func(req *handler.GetDeviceListRequest) (*handler.DeviceListResponse, error) {
+		logger.Printf("获取设备列表: page=%d, pageSize=%d", req.Page, req.PageSize)
+		return &handler.DeviceListResponse{
+			Code:    200,
+			Message: "success",
+			Data: handler.DeviceListData{
+				List: []handler.DeviceItem{
+					{
+						DeviceName:   "设备1",
+						Description:  "测试设备1",
+						DeviceNumber: "DEV001",
+					},
+					{
+						DeviceName:   "设备2",
+						Description:  "测试设备2",
+						DeviceNumber: "DEV002",
+					},
+				},
+				Total: 2,
+			},
+		}, nil
+	})
+
+	// 启动HTTP服务
+	logger.Printf("启动HTTP服务...")
+	if err := h.Start(":8080"); err != nil {
+		logger.Fatalf("服务启动失败: %v", err)
 	}
-	return fmt.Errorf("连接失败: 达到最大重试次数")
 }
 
-// 发布消息到指定主题
-func (client *MQTTClient) Publish(topic string, payload string, qos uint8) error {
-	token := client.client.Publish(topic, qos, false, payload)
-	token.Wait()
-	return token.Error()
+
+=== ..\..\..\tp-protocol-sdk-go\example\main.go ===
+
+// examples/main.go
+
+package main
+
+import (
+	"context"
+	"log"
+	"os"
+	"time"
+
+	"github.com/ThingsPanel/tp-protocol-sdk-go/client"
+)
+
+func main() {
+	// 创建logger
+	logger := log.New(os.Stdout, "[TP-Example] ", log.LstdFlags|log.Lshortfile)
+
+	// 创建客户端配置
+	config := client.ClientConfig{
+		BaseURL:      "http://c.thingspanel.cn",
+		MQTTBroker:   "mqtt://47.92.253.145:1883",
+		MQTTClientID: "example-client",
+		MQTTUsername: "plugin",
+		MQTTPassword: "plugin",
+		Logger:       logger,
+	}
+
+	// 创建SDK客户端
+	c, err := client.NewClient(config)
+	if err != nil {
+		logger.Fatalf("创建客户端失败: %v", err)
+	}
+	defer c.Close()
+
+	// 连接平台
+	if err := c.Connect(); err != nil {
+		logger.Fatalf("连接平台失败: %v", err)
+	}
+
+	// 获取设备配置示例
+	deviceReq := &client.DeviceConfigRequest{
+		DeviceID: "af13ac2c-3a9e-5ab9-cd31-0cf01f984b3c",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	deviceResp, err := c.Device().GetDeviceConfig(ctx, deviceReq)
+	if err != nil {
+		logger.Printf("获取设备配置失败: %v", err)
+	} else {
+		logger.Printf("设备配置: %+v", deviceResp.Data)
+	}
+
+	// 发送服务心跳示例
+	heartbeatReq := &client.HeartbeatRequest{
+		ServiceIdentifier: "test3",
+	}
+
+	heartbeatResp, err := c.Service().SendHeartbeat(ctx, heartbeatReq)
+	if err != nil {
+		logger.Printf("发送心跳失败: %v", err)
+	} else {
+		logger.Printf("心跳响应: %+v", heartbeatResp)
+	}
+
+	// MQTT消息订阅示例
+	err = c.MQTT().Subscribe("plugin/example/+", 1, func(topic string, payload []byte) {
+		logger.Printf("收到消息: topic=%s, payload=%s", topic, string(payload))
+	})
+	if err != nil {
+		logger.Printf("订阅主题失败: %v", err)
+	}
+
+	// 发布消息示例
+	err = c.MQTT().Publish("devices/status/af13ac2c-3a9e-5ab9-cd31-0cf01f984b3c", 1, 1)
+	if err != nil {
+		logger.Printf("发布消息失败: %v", err)
+	}
+
+	// 保持运行一段时间
+	time.Sleep(600 * time.Second)
 }
 
-// 订阅指定主题，并提供一个处理接收到消息的回调函数
-func (client *MQTTClient) Subscribe(topic string, callback mqtt.MessageHandler, qos uint8) error {
-	if token := client.client.Subscribe(topic, qos, callback); token.Wait() && token.Error() != nil {
-		return token.Error()
+
+=== ..\..\..\tp-protocol-sdk-go\handler\handler.go ===
+
+// handler/handler.go
+
+package handler
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+)
+
+// HandlerConfig 处理器配置
+type HandlerConfig struct {
+	Logger *log.Logger // 日志记录器
+}
+
+// Handler 回调处理器
+type Handler struct {
+	logger                  *log.Logger
+	formConfigHandler       func(req *GetFormConfigRequest) (interface{}, error)
+	deviceDisconnectHandler func(req *DeviceDisconnectRequest) error
+	notificationHandler     func(req *NotificationRequest) error
+	getDeviceListHandler    func(req *GetDeviceListRequest) (*DeviceListResponse, error)
+}
+
+// NewHandler 创建一个新的处理器实例
+func NewHandler(config HandlerConfig) *Handler {
+	logger := config.Logger
+	if logger == nil {
+		logger = log.New(log.Writer(), "[TP-Handler] ", log.LstdFlags|log.Lshortfile)
+	}
+
+	return &Handler{
+		logger: logger,
+	}
+}
+
+// parseQueryParams 解析查询参数
+func parseQueryParams(r *http.Request, obj interface{}) error {
+	// 这里可以使用反射来实现，为了简单起见，我们针对具体类型处理
+	switch v := obj.(type) {
+	case *GetFormConfigRequest:
+		v.ProtocolType = r.URL.Query().Get("protocol_type")
+		v.DeviceType = r.URL.Query().Get("device_type")
+		v.FormType = r.URL.Query().Get("form_type")
+
+		// 验证必填参数
+		if v.ProtocolType == "" || v.DeviceType == "" || v.FormType == "" {
+			return fmt.Errorf("missing required query parameters")
+		}
+
+	case *GetDeviceListRequest:
+		v.Voucher = r.URL.Query().Get("voucher")
+		v.ServiceIdentifier = r.URL.Query().Get("service_identifier")
+
+		pageSize := r.URL.Query().Get("page_size")
+		page := r.URL.Query().Get("page")
+
+		if v.Voucher == "" || v.ServiceIdentifier == "" || pageSize == "" || page == "" {
+			return fmt.Errorf("missing required query parameters")
+		}
+
+		var err error
+		v.PageSize, err = strconv.Atoi(pageSize)
+		if err != nil {
+			return fmt.Errorf("invalid page_size")
+		}
+
+		v.Page, err = strconv.Atoi(page)
+		if err != nil {
+			return fmt.Errorf("invalid page")
+		}
 	}
 	return nil
 }
 
-// 发送在线离线消息status 1-在线 0-离线
-func (client *MQTTClient) SendStatus(deviceID string, status string) (err error) {
-	// 校验参数
-	if deviceID == "" {
-		return fmt.Errorf("deviceID不能为空")
+func (h *Handler) handleFormConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
 	}
-	if status != "1" && status != "0" {
-		return fmt.Errorf("status只能为1或0")
+
+	var req GetFormConfigRequest
+	if err := parseQueryParams(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
-	token := client.client.Publish("devices/status/"+deviceID, 1, false, []byte(status))
-	token.Wait()
-	return token.Error()
+
+	data, err := h.formConfigHandler(&req)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.writeResponse(w, http.StatusOK, "success", data)
+}
+
+func (h *Handler) handleDeviceDisconnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req DeviceDisconnectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.deviceDisconnectHandler(&req); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.writeResponse(w, http.StatusOK, "success", nil)
+}
+
+func (h *Handler) handleNotification(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req NotificationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.notificationHandler(&req); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.writeResponse(w, http.StatusOK, "success", nil)
+}
+
+func (h *Handler) handleGetDeviceList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req GetDeviceListRequest
+	if err := parseQueryParams(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	resp, err := h.getDeviceListHandler(&req)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.writeResponse(w, http.StatusOK, "success", resp.Data)
+}
+
+func (h *Handler) writeError(w http.ResponseWriter, code int, message string) {
+	h.writeResponse(w, code, message, nil)
+}
+
+func (h *Handler) writeResponse(w http.ResponseWriter, code int, message string, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	resp := CommonResponse{
+		Code:    code,
+		Message: message,
+		Data:    data,
+	}
+	json.NewEncoder(w).Encode(resp)
+}
+
+// ServeHTTP 实现 http.Handler 接口
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.logger.Printf("收到请求: %s %s", r.Method, r.URL.Path)
+
+	switch r.URL.Path {
+	case "/api/v1/form/config":
+		h.handleFormConfig(w, r)
+	case "/api/v1/device/disconnect":
+		h.handleDeviceDisconnect(w, r)
+	case "/api/v1/plugin/notification":
+		h.handleNotification(w, r)
+	case "/api/v1/plugin/device/list":
+		h.handleGetDeviceList(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+// SetFormConfigHandler 设置表单配置处理函数
+func (h *Handler) SetFormConfigHandler(handler func(req *GetFormConfigRequest) (interface{}, error)) {
+	h.formConfigHandler = handler
+}
+
+// SetDeviceDisconnectHandler 设置设备断开处理函数
+func (h *Handler) SetDeviceDisconnectHandler(handler func(req *DeviceDisconnectRequest) error) {
+	h.deviceDisconnectHandler = handler
+}
+
+// SetNotificationHandler 设置通知处理函数
+func (h *Handler) SetNotificationHandler(handler func(req *NotificationRequest) error) {
+	h.notificationHandler = handler
+}
+
+// SetGetDeviceListHandler 设置获取设备列表处理函数
+func (h *Handler) SetGetDeviceListHandler(handler func(req *GetDeviceListRequest) (*DeviceListResponse, error)) {
+	h.getDeviceListHandler = handler
+}
+
+// Start 启动HTTP服务
+func (h *Handler) Start(addr string) error {
+	h.logger.Printf("启动HTTP服务: %s", addr)
+	return http.ListenAndServe(addr, h)
 }
 
 
-=== ..\..\..\tp-protocol-sdk-go\serve.go ===
+=== ..\..\..\tp-protocol-sdk-go\handler\types.go ===
 
-package tpprotocolsdkgo
+// handler/types.go
 
-import (
-	"net/http"
-)
+package handler
 
-// Handler 结构体用于存储用户提供的回调函数
-type Handler struct {
-	// 获取协议插件的json表单
-	OnGetForm func(w http.ResponseWriter, r *http.Request)
-	// 断开设备连接回调（让设备重新连接）
-	OnDisconnectDevice func(w http.ResponseWriter, r *http.Request)
-	// 获取设备列表
-	GetDeviceList func(w http.ResponseWriter, r *http.Request)
-	// 通知事件
-	OnNotifyEvent func(w http.ResponseWriter, r *http.Request)
+// GetFormConfigRequest 获取表单配置请求
+type GetFormConfigRequest struct {
+	ProtocolType string `form:"protocol_type" binding:"required"` // 协议/服务标识符
+	DeviceType   string `form:"device_type" binding:"required"`   // 1-设备 2-网关 3-子设备
+	FormType     string `form:"form_type" binding:"required"`     // CFG-配置表单 VCR-凭证表单 SVCR-服务凭证表单
 }
 
-// ListenAndServe 函数启动一个HTTP服务器来处理TP平台的通知
-func (h *Handler) ListenAndServe(addr string) error {
-	mux := http.NewServeMux()
+// DeviceDisconnectRequest 设备断开连接请求
+type DeviceDisconnectRequest struct {
+	DeviceID string `json:"device_id" binding:"required"`
+}
 
-	// 获取协议插件的json表单
-	mux.HandleFunc("/api/v1/form/config", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			h.OnGetForm(w, r)
-		} else {
-			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		}
-	})
+// NotificationRequest 通知请求
+type NotificationRequest struct {
+	MessageType string `json:"message_type" binding:"required"` // 1-服务配置修改
+	Message     string `json:"message,omitempty"`               // 消息内容
+}
 
-	// 断开设备连接
-	mux.HandleFunc("/api/v1/device/disconnect", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			h.OnDisconnectDevice(w, r)
-		} else {
-			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		}
-	})
+// GetDeviceListRequest 获取设备列表请求
+type GetDeviceListRequest struct {
+	Voucher           string `form:"voucher" binding:"required"`            // 凭证
+	ServiceIdentifier string `form:"service_identifier" binding:"required"` // 服务标识符
+	PageSize          int    `form:"page_size" binding:"required"`          // 每页数量
+	Page              int    `form:"page" binding:"required"`               // 页数
+}
 
-	// 获取设备列表
-	mux.HandleFunc("/api/v1/plugin/device/list", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			h.GetDeviceList(w, r)
-		} else {
-			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		}
-	})
+// DeviceItem 设备列表项
+type DeviceItem struct {
+	DeviceName   string `json:"device_name"`
+	Description  string `json:"description"`
+	DeviceNumber string `json:"device_number"`
+}
 
-	// 通知事件
-	mux.HandleFunc("/api/v1/notify/event", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			h.OnNotifyEvent(w, r)
-		} else {
-			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		}
-	})
-	return http.ListenAndServe(addr, mux)
+// DeviceListData 设备列表数据
+type DeviceListData struct {
+	List  []DeviceItem `json:"list"`
+	Total int          `json:"total"`
+}
+
+// CommonResponse 通用响应结构
+type CommonResponse struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+// DeviceListResponse 设备列表响应
+type DeviceListResponse struct {
+	Code    int            `json:"code"`
+	Message string         `json:"message"`
+	Data    DeviceListData `json:"data"`
+}
+
+
+=== ..\..\..\tp-protocol-sdk-go\types\types.go ===
+
+package types
+
+// Device 设备信息结构体
+type Device struct {
+	ID           string                 `json:"id"`
+	Voucher      string                 `json:"voucher"`
+	DeviceNumber string                 `json:"device_number"`
+	DeviceType   string                 `json:"device_type"`
+	ProtocolType string                 `json:"protocol_type"`
+	SubDevices   []SubDevice            `json:"sub_devices,omitempty"`
+	Config       map[string]interface{} `json:"config"`
+}
+
+// SubDevice 子设备信息结构体
+type SubDevice struct {
+	DeviceID      string                 `json:"device_id"`
+	Voucher       string                 `json:"voucher"`
+	DeviceNumber  string                 `json:"device_number"`
+	SubDeviceAddr string                 `json:"sub_device_addr"`
+	Config        map[string]interface{} `json:"config"`
+}
+
+// ServiceAccess 服务接入信息结构体
+type ServiceAccess struct {
+	ServiceAccessID   string   `json:"service_access_id"`
+	ServiceIdentifier string   `json:"service_identifier"`
+	Voucher           string   `json:"voucher"`
+	Description       string   `json:"description"`
+	Remark            string   `json:"remark"`
+	Devices           []Device `json:"devices"`
+}
+
+// CommonResponse 通用响应结构体
+type CommonResponse struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
 }
