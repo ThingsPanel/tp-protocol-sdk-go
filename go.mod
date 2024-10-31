@@ -1,6 +1,6 @@
 module github.com/ThingsPanel/tp-protocol-sdk-go
 
-go 1.18
+go 1.22
 
 require github.com/eclipse/paho.mqtt.golang v1.4.3
 
