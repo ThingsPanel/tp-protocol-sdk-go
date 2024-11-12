@@ -45,6 +45,22 @@ func NewServiceAPI(client *APIClient) *ServiceAPI {
 	}
 }
 
+// 获取服务接入点列表
+func (s *ServiceAPI) GetServiceAccessList(ctx context.Context, req *ServiceAccessRequest) ([]types.ServiceAccessRsp, error) {
+	s.client.logger.Printf("开始获取服务接入点列表: serviceIdentifier=%s", req.ServiceIdentifier)
+
+	var resp []types.ServiceAccessRsp
+	err := s.client.Post(ctx, "/api/v1/plugin/service/access/list", req, &resp)
+	if err != nil {
+		s.client.logger.Printf("获取服务接入点列表失败: %v", err)
+		return nil, fmt.Errorf("获取服务接入点列表失败: %w", err)
+	}
+
+	s.client.logger.Printf("获取服务接入点列表成功: serviceIdentifier=%s",
+		req.ServiceIdentifier)
+	return resp, nil
+}
+
 // GetServiceAccess 获取服务接入点信息
 func (s *ServiceAPI) GetServiceAccess(ctx context.Context, req *ServiceAccessRequest) (*ServiceAccessResponse, error) {
 	s.client.logger.Printf("开始获取服务接入点信息: serviceAccessID=%s", req.ServiceAccessID)

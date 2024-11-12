@@ -36,3 +36,28 @@ type CommonResponse struct {
 	Message string      `json:"message"`
 	Data    interface{} `json:"data"`
 }
+
+// ServiceAccess 服务接入点列表返回的服务接入点信息
+type ServiceAccessRsp struct {
+	Description string      `json:"description"`
+	Devices     []DeviceRsp `json:"devices"`
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	Remark      string      `json:"remark"`
+	Voucher     string      `json:"voucher"`
+}
+
+// Device 设备信息
+type DeviceRsp struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Voucher         string `json:"voucher"`
+	IsEnabled       string `json:"is_enabled"`
+	DeviceNumber    string `json:"device_number"`
+	SubDeviceAddr   string `json:"sub_device_addr"`
+	AdditionalInfo  string `json:"additional_info"`
+	ProtocolConfig  string `json:"protocol_config"`
+	DeviceConfigID  string `json:"device_config_id"`
+	IsOnline        int    `json:"is_online"`
+	ServiceAccessID string `json:"service_access_id"`
+}
