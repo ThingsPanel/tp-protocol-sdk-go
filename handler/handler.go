@@ -46,7 +46,7 @@ func parseQueryParams(r *http.Request, obj interface{}) error {
 		v.FormType = r.URL.Query().Get("form_type")
 
 		// 验证必填参数
-		if v.ProtocolType == "" || v.DeviceType == "" || v.FormType == "" {
+		if v.ProtocolType == "" || v.FormType == "" {
 			return fmt.Errorf("missing required query parameters")
 		}
 

@@ -5,7 +5,7 @@ package handler
 // GetFormConfigRequest 获取表单配置请求
 type GetFormConfigRequest struct {
 	ProtocolType string `form:"protocol_type" binding:"required"` // 协议/服务标识符
-	DeviceType   string `form:"device_type" binding:"required"`   // 1-设备 2-网关 3-子设备
+	DeviceType   string `form:"device_type,omitempty"`            // 1-设备 2-网关 3-子设备
 	FormType     string `form:"form_type" binding:"required"`     // CFG-配置表单 VCR-凭证表单 SVCR-服务凭证表单
 }
 
