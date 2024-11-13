@@ -22,10 +22,10 @@ type NotificationRequest struct {
 
 // GetDeviceListRequest 获取设备列表请求
 type GetDeviceListRequest struct {
-	Voucher           string `form:"voucher" binding:"required"`            // 凭证
-	ServiceIdentifier string `form:"service_identifier" binding:"required"` // 服务标识符
-	PageSize          int    `form:"page_size" binding:"required"`          // 每页数量
-	Page              int    `form:"page" binding:"required"`               // 页数
+	Voucher           string `form:"voucher" binding:"required"`   // 凭证
+	ServiceIdentifier string `form:"service_identifier,omitempty"` // 服务标识符
+	PageSize          int    `form:"page_size" binding:"required"` // 每页数量
+	Page              int    `form:"page" binding:"required"`      // 页数
 }
 
 // DeviceItem 设备列表项

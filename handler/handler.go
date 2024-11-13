@@ -57,7 +57,7 @@ func parseQueryParams(r *http.Request, obj interface{}) error {
 		pageSize := r.URL.Query().Get("page_size")
 		page := r.URL.Query().Get("page")
 
-		if v.Voucher == "" || v.ServiceIdentifier == "" || pageSize == "" || page == "" {
+		if v.Voucher == "" || pageSize == "" || page == "" {
 			return fmt.Errorf("missing required query parameters")
 		}
 
