@@ -27,6 +27,12 @@ type ServiceAccessResponse struct {
 	Data    types.ServiceAccess `json:"data"`
 }
 
+type ServiceAccessListResponse struct {
+	Code    int                      `json:"code"`
+	Message string                   `json:"message"`
+	Data    []types.ServiceAccessRsp `json:"data"`
+}
+
 // HeartbeatRequest 心跳请求
 type HeartbeatRequest struct {
 	ServiceIdentifier string `json:"service_identifier"`
@@ -46,10 +52,10 @@ func NewServiceAPI(client *APIClient) *ServiceAPI {
 }
 
 // 获取服务接入点列表
-func (s *ServiceAPI) GetServiceAccessList(ctx context.Context, req *ServiceAccessRequest) ([]types.ServiceAccessRsp, error) {
+func (s *ServiceAPI) GetServiceAccessList(ctx context.Context, req *ServiceAccessRequest) (*ServiceAccessListResponse, error) {
 	s.client.logger.Printf("开始获取服务接入点列表: serviceIdentifier=%s", req.ServiceIdentifier)
 
-	var resp []types.ServiceAccessRsp
+	var resp ServiceAccessListResponse
 	err := s.client.Post(ctx, "/api/v1/plugin/service/access/list", req, &resp)
 	if err != nil {
 		s.client.logger.Printf("获取服务接入点列表失败: %v", err)
@@ -58,7 +64,7 @@ func (s *ServiceAPI) GetServiceAccessList(ctx context.Context, req *ServiceAcces
 
 	s.client.logger.Printf("获取服务接入点列表成功: serviceIdentifier=%s",
 		req.ServiceIdentifier)
-	return resp, nil
+	return &resp, nil
 }
 
 // GetServiceAccess 获取服务接入点信息
