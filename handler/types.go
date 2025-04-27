@@ -54,3 +54,15 @@ type DeviceListResponse struct {
 	Message string         `json:"message"`
 	Data    DeviceListData `json:"data"`
 }
+
+// GetDeviceInfoRequest 获取设备信息请求
+type GetDeviceInfoRequest struct {
+	Key string `form:"key" binding:"required"`
+}
+
+// GetDeviceInfoResponse 获取设备信息响应
+type GetDeviceInfoResponse struct {
+	Code    int        `json:"code"`
+	Message string     `json:"message"`
+	Data    DeviceItem `json:"data"`
+}

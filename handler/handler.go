@@ -22,6 +22,7 @@ type Handler struct {
 	deviceDisconnectHandler func(req *DeviceDisconnectRequest) error
 	notificationHandler     func(req *NotificationRequest) error
 	getDeviceListHandler    func(req *GetDeviceListRequest) (*DeviceListResponse, error)
+	getDeviceInfoHandler    func(req *GetDeviceInfoRequest) (*GetDeviceInfoResponse, error)
 }
 
 // NewHandler 创建一个新的处理器实例
@@ -157,6 +158,28 @@ func (h *Handler) handleGetDeviceList(w http.ResponseWriter, r *http.Request) {
 	h.writeResponse(w, http.StatusOK, "success", resp.Data)
 }
 
+// 通过密钥获取设备信息
+func (h *Handler) handleGetDeviceInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req GetDeviceInfoRequest
+	if err := parseQueryParams(r, &req); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	data, err := h.getDeviceInfoHandler(&req)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.writeResponse(w, http.StatusOK, "success", data)
+}
+
 func (h *Handler) writeError(w http.ResponseWriter, code int, message string) {
 	h.writeResponse(w, code, message, nil)
 }
@@ -184,6 +207,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleNotification(w, r)
 	case "/api/v1/plugin/device/list":
 		h.handleGetDeviceList(w, r)
+	case "/api/v1/plugin/device/info":
+		h.handleGetDeviceInfo(w, r)
 	default:
 		http.NotFound(w, r)
 	}
