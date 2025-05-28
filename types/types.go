@@ -61,3 +61,14 @@ type DeviceRsp struct {
 	IsOnline        int    `json:"is_online"`
 	ServiceAccessID string `json:"service_access_id"`
 }
+
+// DeviceDynamicAuthData 设备动态认证响应data结构体
+// 用于 /api/v1/device/auth 响应
+// {
+//   "device_id": "...",
+//   "voucher": "..."
+// }
+type DeviceDynamicAuthData struct {
+	DeviceID string `json:"device_id"`
+	Voucher  string `json:"voucher"`
+}
