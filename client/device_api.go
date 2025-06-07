@@ -36,10 +36,12 @@ type DeviceConfigResponse struct {
 // - device_name (string, 可选)
 // - product_key (string, 可选)
 type DeviceDynamicAuthRequest struct {
-	TemplateSecret string `json:"template_secret"`
-	DeviceNumber   string `json:"device_number"`
-	DeviceName     string `json:"device_name,omitempty"`
-	ProductKey     string `json:"product_key,omitempty"`
+	TemplateSecret     string `json:"template_secret"`
+	DeviceNumber       string `json:"device_number"`
+	DeviceName         string `json:"device_name,omitempty"`
+	ProductKey         string `json:"product_key,omitempty"`
+	SubDeviceAddr      string `json:"sub_device_addr,omitempty"`
+	ParentDeviceNumber string `json:"parent_device_number,omitempty"`
 }
 
 // DeviceDynamicAuthResponse 设备动态认证响应
