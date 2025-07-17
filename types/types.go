@@ -2,22 +2,24 @@ package types
 
 // Device 设备信息结构体
 type Device struct {
-	ID           string                 `json:"id"`
-	Voucher      string                 `json:"voucher"`
-	DeviceNumber string                 `json:"device_number"`
-	DeviceType   string                 `json:"device_type"`
-	ProtocolType string                 `json:"protocol_type"`
-	SubDevices   []SubDevice            `json:"sub_devices,omitempty"`
-	Config       map[string]interface{} `json:"config"`
+	ID                     string                 `json:"id"`
+	Voucher                string                 `json:"voucher"`
+	DeviceNumber           string                 `json:"device_number"`
+	DeviceType             string                 `json:"device_type"`
+	ProtocolType           string                 `json:"protocol_type"`
+	SubDevices             []SubDevice            `json:"sub_devices,omitempty"`
+	ProtocolConfigTemplate map[string]interface{} `json:"protocol_config_template"` // 设备模板的protocol_config
+	Config                 map[string]interface{} `json:"config"`
 }
 
 // SubDevice 子设备信息结构体
 type SubDevice struct {
-	DeviceID      string                 `json:"device_id"`
-	Voucher       string                 `json:"voucher"`
-	DeviceNumber  string                 `json:"device_number"`
-	SubDeviceAddr string                 `json:"sub_device_addr"`
-	Config        map[string]interface{} `json:"config"`
+	DeviceID               string                 `json:"device_id"`
+	Voucher                string                 `json:"voucher"`
+	DeviceNumber           string                 `json:"device_number"`
+	SubDeviceAddr          string                 `json:"sub_device_addr"`
+	ProtocolConfigTemplate map[string]interface{} `json:"protocol_config_template"` // 设备模板的protocol_config
+	Config                 map[string]interface{} `json:"config"`
 }
 
 // ServiceAccess 服务接入信息结构体

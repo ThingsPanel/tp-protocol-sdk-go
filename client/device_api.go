@@ -52,9 +52,14 @@ type DeviceListRequest struct {
 }
 
 type DeviceListResponse struct {
-	Code    int            `json:"code"`
-	Message string         `json:"message"`
-	List    []types.Device `json:"list"`
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    DevicesList `json:"data"`
+}
+
+type DevicesList struct {
+	List  []types.Device `json:"list"`
+	Total int            `json:"total"`
 }
 
 // DeviceDynamicAuthResponse 设备动态认证响应
@@ -119,6 +124,6 @@ func (d *DeviceAPI) GetDeviceByServiceIdentifier(ctx context.Context, req *Devic
 		d.client.logger.Printf("获取设备列表失败: %v", err)
 		return nil, fmt.Errorf("获取设备列表失败: %w", err)
 	}
-	d.client.logger.Printf("获取设备列表成功: %d", len(resp.List))
+	d.client.logger.Printf("获取设备列表成功: %d", resp.Data.Total)
 	return &resp, nil
 }
