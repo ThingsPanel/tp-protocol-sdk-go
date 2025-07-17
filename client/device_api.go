@@ -44,6 +44,19 @@ type DeviceDynamicAuthRequest struct {
 	ParentDeviceNumber string `json:"parent_device_number,omitempty"`
 }
 
+type DeviceListRequest struct {
+	ServiceIdentifier string `json:"service_identifier"`
+	DeviceType        string `json:"device_type"`
+	Page              int    `json:"page"`
+	PageSize          int    `json:"page_size"`
+}
+
+type DeviceListResponse struct {
+	Code    int            `json:"code"`
+	Message string         `json:"message"`
+	List    []types.Device `json:"list"`
+}
+
 // DeviceDynamicAuthResponse 设备动态认证响应
 // 响应示例：
 //
@@ -80,7 +93,7 @@ func (d *DeviceAPI) GetDeviceConfig(ctx context.Context, req *DeviceConfigReques
 	}
 
 	d.client.logger.Printf("获取设备配置成功: deviceID=%s, deviceType=%s",
-		req.DeviceID, resp.Data.DeviceType)
+		resp.Data.ID, resp.Data.DeviceType)
 	return &resp, nil
 }
 
@@ -95,5 +108,17 @@ func (d *DeviceAPI) DeviceDynamicAuth(ctx context.Context, req *DeviceDynamicAut
 		return nil, fmt.Errorf("设备动态认证失败: %w", err)
 	}
 	d.client.logger.Printf("设备动态认证成功: deviceID=%s", resp.Data.DeviceID)
+	return &resp, nil
+}
+
+// GetDeviceByServiceIdentifier 根据服务标识符获取设备信息（带配置）
+func (d *DeviceAPI) GetDeviceByServiceIdentifier(ctx context.Context, req *DeviceListRequest) (*DeviceListResponse, error) {
+	var resp DeviceListResponse
+	err := d.client.Post(ctx, "/api/v1/plugin/devices", req, &resp)
+	if err != nil {
+		d.client.logger.Printf("获取设备列表失败: %v", err)
+		return nil, fmt.Errorf("获取设备列表失败: %w", err)
+	}
+	d.client.logger.Printf("获取设备列表成功: %d", len(resp.List))
 	return &resp, nil
 }
